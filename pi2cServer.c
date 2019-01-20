@@ -15,7 +15,7 @@
 
 /* Constants */
 #define SLEEP_MS 0x1F4
-#define IIC_MAX_SLAVES 1
+#define IIC_MAX_SLAVES 0xf
 #define IIC_SLAVE_CLOSED 0
 #define IIC_SLAVE_ACTIVE 1
 
@@ -28,6 +28,15 @@ typedef struct iic_slave_t {
   struct iic_slave_t *root_slave_p; /* typedef not okay in itself, use struct */
   struct iic_slave_t *next_slave_p;
 } iic_slave_t;
+
+/* Globals */
+/*
+ * NOTE: `static` in this context declares "file" global scope"
+ *
+ * BE CAREFUL with assignments and accesses, who knows where these are used.
+ *
+*/
+static iic_slave_t *slaves_p; /* Global so we can cleanup memory from signal handlers */
 
 /* Debug */
 #define DO_DEBUG 1
@@ -43,7 +52,7 @@ void die(char *dieMsg, ERROR dieCode);
 
 static void handle_sigint(int signum);
 
-void setup_signals();
+void route_signals();
 
 void iic_master_init();
 
@@ -72,7 +81,7 @@ static void handle_sigint(int signum)
   return;
 }
 
-void setup_signals()
+void route_signals()
 {
   struct sigaction sigAct;
   struct sigaction *sigAct_p;
@@ -84,7 +93,7 @@ void setup_signals()
   if(sigaction(SIGINT, sigAct_p, NULL)) {
     die("Could not setup SIGINT", EC_SIGINT);
   } else {
-    CMG_DBG(printf("[setup_signals] SIGINT SUCCESS\n"));
+    CMG_DBG(printf("[route_signals] SIGINT SUCCESS\n"));
   }
   return;
 }
@@ -110,13 +119,17 @@ void iic_master_init()
 
 void iic_master_quit()
 {
+  iic_free_slaves(&slaves_p);
+
   bcm2835_i2c_end(); /* May be redundant since we're closing bcm2835 next */
-  CMG_DBG(printf("[iic_master_quit] dispose memory, disconnect bcm2835\n"));
+
+  CMG_DBG(printf("[iic_master_quit] Disconnect bcm2835\n"));
   if (!bcm2835_close()) {
     printf("[iic_master_quit] Error closing bcm2835 IO\n");
   } else {
     CMG_DBG(printf("[iic_master_quit] bcm2835_close SUCCESS\n"));
   }
+
   return;
 }
 
@@ -205,7 +218,6 @@ void iic_free_slaves(iic_slave_t **slaves_p)
 
 ERROR iic_process_slaves()
 {
-
   CMG_DBG(printf("process i2c slaves\n"));
   return SUCCESS;
 }
@@ -217,11 +229,9 @@ ERROR iic_main()
   unsigned int loopVal;
   struct timespec timeReq;
   struct timespec *timeReq_p;
-  iic_slave_t *iic_slaves_p;
 
   status = 0;
   loopVal = 0;
-  iic_slaves_p = NULL;
 
   /* setup sleep timer */
   sleepStat = 0;
@@ -229,8 +239,7 @@ ERROR iic_main()
   timeReq_p->tv_sec = 0;
   timeReq_p->tv_nsec = (1000 * 1000 * SLEEP_MS);
 
-  status = iic_alloc_slaves(&iic_slaves_p);
-  iic_free_slaves(&iic_slaves_p);
+  status = iic_alloc_slaves(&slaves_p);
 
   /* main loop */
   status = 0;
@@ -259,7 +268,7 @@ int main (int argc, char *argv[])
   CMG_DBG(printf("Hi chris\n"));
 
   /* Register system signals to our handlers */
-  setup_signals();
+  route_signals();
 
   /* Initialize i2c */
   iic_master_init();
@@ -267,8 +276,9 @@ int main (int argc, char *argv[])
   /* Main task entry point */
   status = iic_main();
 
-  /* SHOULD NEVER GET HERE: cleanup just incase */
+  /* --- SHOULD NEVER GET HERE ---
+   * cleanup just incase
+  */
   iic_master_quit();
-
   return status;
 }
