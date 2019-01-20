@@ -1,3 +1,13 @@
+/* ----- i2c RaspberryPi Controller -----
+ * Notes:
+ *   - This assumes drivers already installed on Raspbian GNU/Linux 9 (stretch).
+ *   - Run:
+ *     $ sudo sh run.sh
+ * 
+ * 20190120 cmgrass
+ *
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,12 +49,12 @@ typedef struct iic_slave_t {
 static iic_slave_t *slaves_p; /* Global so we can cleanup memory from signal handlers */
 
 /* Debug */
-#define DO_DEBUG 1
+#define CMG_DBG 1
 
-#ifdef DO_DEBUG
-#define CMG_DBG(x) x
+#ifdef CMG_DBG
+#define CMG_PRINT(x) printf x
 #else
-#define CMG_DBG(x) do {} while (0)
+#define CMG_PRINT(x) do {} while (0)
 #endif
 
 /* prototypes */
@@ -93,26 +103,26 @@ void route_signals()
   if(sigaction(SIGINT, sigAct_p, NULL)) {
     die("Could not setup SIGINT", EC_SIGINT);
   } else {
-    CMG_DBG(printf("[route_signals] SIGINT SUCCESS\n"));
+    CMG_PRINT(("[route_signals] SIGINT SUCCESS\n"));
   }
   return;
 }
 
 void iic_master_init()
 {
-  CMG_DBG(printf("[iic_master_init] Setup bcm2835 interface\n"));
+  CMG_PRINT(("[iic_master_init] Setup bcm2835 interface\n"));
   if (!bcm2835_init()) {
     die("[iic_master_init] Could not access bcm2835 IO", EC_IIC_INITFAIL); 
   } else {
-    CMG_DBG(printf("[iic_master_init] bcm2835 init SUCCESS\n"));
+    CMG_PRINT(("[iic_master_init] bcm2835 init SUCCESS\n"));
   }
 
-  CMG_DBG(printf("[iic_master_init] Setup i2c pins\n"));
+  CMG_PRINT(("[iic_master_init] Setup i2c pins\n"));
   if (!bcm2835_i2c_begin()) {
     die("[iic_master_init] FAILED setting up i2c hardware.\nPlease run as root",
         EC_IIC_INITFAIL);
   } else {
-    CMG_DBG(printf("[iic_master_init] i2c setup SUCCESS\n"));
+    CMG_PRINT(("[iic_master_init] i2c setup SUCCESS\n"));
   }
   return;
 }
@@ -123,11 +133,11 @@ void iic_master_quit()
 
   bcm2835_i2c_end(); /* May be redundant since we're closing bcm2835 next */
 
-  CMG_DBG(printf("[iic_master_quit] Disconnect bcm2835\n"));
+  CMG_PRINT(("[iic_master_quit] Disconnect bcm2835\n"));
   if (!bcm2835_close()) {
     printf("[iic_master_quit] Error closing bcm2835 IO\n");
   } else {
-    CMG_DBG(printf("[iic_master_quit] bcm2835_close SUCCESS\n"));
+    CMG_PRINT(("[iic_master_quit] bcm2835_close SUCCESS\n"));
   }
 
   return;
@@ -145,11 +155,11 @@ ERROR iic_alloc_slaves(iic_slave_t **slaves_p)
   status = SUCCESS;
 
   if (IIC_MAX_SLAVES > UINT8_MAX) {
-    CMG_DBG(printf("[iic_alloc_slaves] IIC_MAX_SLAVES:%x exceed type:%x\n",
+    CMG_PRINT(("[iic_alloc_slaves] IIC_MAX_SLAVES:%x exceed type:%x\n",
            IIC_MAX_SLAVES, UINT8_MAX));
     status = EC_IIC_INVAL;
   } else if (IIC_MAX_SLAVES < 1) {
-    CMG_DBG(printf("[iic_alloc_slaves] IIC_MAX_SLAVES:%x too small\n",
+    CMG_PRINT(("[iic_alloc_slaves] IIC_MAX_SLAVES:%x too small\n",
               IIC_MAX_SLAVES));
     status = EC_IIC_INVAL;
   }
@@ -167,13 +177,13 @@ ERROR iic_alloc_slaves(iic_slave_t **slaves_p)
     /* allocate a new structure */
     curr_p = malloc(sizeof(iic_slave_t));
     if (!curr_p) {
-      CMG_DBG(printf("[iic_alloc_slaves] could not allocate slave struct\n"));
+      CMG_PRINT(("[iic_alloc_slaves] could not allocate slave struct\n"));
       die("Fatal memory allocation", EC_IIC_MALLOC);
     } else {
       memset(curr_p, 0, sizeof(iic_slave_t));
     }
 
-    CMG_DBG(printf("[iic_alloc_slaves] allocated slave:%lx\n", curr_p));
+    CMG_PRINT(("[iic_alloc_slaves] allocated slave:%lx\n", curr_p));
 
     /* attach to linked list */
     if (idx == 0) {
@@ -181,7 +191,7 @@ ERROR iic_alloc_slaves(iic_slave_t **slaves_p)
       (*slaves_p)->root_slave_p = curr_p;
     } else {
       if (!last_p) {
-        CMG_DBG(printf("[iic_alloc_slaves] slave setup pointer invalid\n"));
+        CMG_PRINT(("[iic_alloc_slaves] slave setup pointer invalid\n"));
         die("Fatal slave_p error", EC_IIC_INVAL);
       } else {
         last_p->next_slave_p = curr_p;
@@ -189,7 +199,7 @@ ERROR iic_alloc_slaves(iic_slave_t **slaves_p)
     }
     last_p = curr_p;
   }
-  CMG_DBG(printf("[iic_alloc_slaves] allocated %x slaves starting @:%lx\n",
+  CMG_PRINT(("[iic_alloc_slaves] allocated %x slaves starting @:%lx\n",
             idx, *slaves_p));
   return idx;
 }
@@ -205,7 +215,7 @@ void iic_free_slaves(iic_slave_t **slaves_p)
   curr_p = *slaves_p;
   while (curr_p != NULL) {
     next_p = curr_p->next_slave_p;
-    CMG_DBG(printf("[iic_free_slaves] freeing slave:%lx, next:%lx\n",
+    CMG_PRINT(("[iic_free_slaves] freeing slave:%lx, next:%lx\n",
               curr_p, next_p));
     free(curr_p);
     curr_p = next_p;
@@ -218,7 +228,7 @@ void iic_free_slaves(iic_slave_t **slaves_p)
 
 ERROR iic_process_slaves()
 {
-  CMG_DBG(printf("process i2c slaves\n"));
+  CMG_PRINT(("process i2c slaves\n"));
   return SUCCESS;
 }
 
@@ -245,7 +255,7 @@ ERROR iic_main()
   status = 0;
 
   while (1) {
-    CMG_DBG(printf("loopVal:%x\n", loopVal));
+    CMG_PRINT(("loopVal:%x\n", loopVal));
     if (loopVal > 0xF) {
       status = iic_process_slaves();
       loopVal = 0;
@@ -265,7 +275,7 @@ int main (int argc, char *argv[])
 
   status = SUCCESS;
 
-  CMG_DBG(printf("Hi chris\n"));
+  CMG_PRINT(("Hi chris\n"));
 
   /* Register system signals to our handlers */
   route_signals();
