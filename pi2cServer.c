@@ -15,7 +15,7 @@
 
 /* Constants */
 #define SLEEP_MS 0x1F4
-#define IIC_MAX_SLAVES 0xf
+#define IIC_MAX_SLAVES 1
 #define IIC_SLAVE_CLOSED 0
 #define IIC_SLAVE_ACTIVE 1
 
