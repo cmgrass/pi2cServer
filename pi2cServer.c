@@ -6,7 +6,8 @@
 #include <bcm2835.h> /* RPI IO Access Lib */
 
 /* Status */
-#define SUCCESS 0
+#define SUCCESS           0
+#define EC_SIGINT       490
 #define EC_IIC_INITFAIL 501
 
 /* Constants */
@@ -29,47 +30,48 @@ void die(char *dieMsg, ERROR dieCode)
 {
   printf("exiting:%x %s\n", dieCode, dieMsg);
   exit(1);
+  return;
 }
 
-ERROR iic_master_init()
+void iic_master_init()
 {
   CMG_PRINT(printf("[iic_master_init] First, setup bcm2835 interface\n"));
   if (!bcm2835_init()) {
-    die("could not access bcm2835 IO", EC_IIC_INITFAIL); 
+    die("[iic_master_init] Could not access bcm2835 IO", EC_IIC_INITFAIL); 
   } else {
     CMG_PRINT(printf("[iic_master_init] bcm2835 init SUCCESS\n"));
   }
-  return SUCCESS;
+
+  CMG_PRINT(printf("[iic_master_init] Second, setup i2c pins\n"));
+  if (!bcm2835_i2c_begin()) {
+    die("[iic_master_init] Could not setup i2c hardware.\nPlease run as root",
+        EC_IIC_INITFAIL);
+  } else {
+    CMG_PRINT(printf("[iic_master_init] i2c setup SUCCESS\n"));
+  }
+  return;
 }
 
-ERROR iic_master_close()
+void iic_master_close()
 {
-  ERROR status;
-
   CMG_PRINT(printf("[iic_master_close] dispose memory, disconnect bcm2835\n"));
-  if (!(status = bcm2835_close())) {
+  if (!bcm2835_close()) {
     printf("[iic_master_close] Error closing bcm2835 IO:%x\n", status);
   } else {
     CMG_PRINT(printf("[iic_master_close] bcm2835_close SUCCESS\n"));
   }
-  return status;
+  return;
 }
 
 static void sigintHandler(int signum)
 {
-  ERROR status;
-
-  status = 0;
-
-  status = iic_master_close();
-  die("User requested program interrupt", status);
-
+  iic_master_close();
+  die("User requested program interrupt", EC_SIGINT);
   return;
 }
 
 void setupSignals()
 {
-  ERROR status;
   struct sigaction sigAct;
   struct sigaction *sigAct_p;
 
@@ -77,15 +79,15 @@ void setupSignals()
   memset(sigAct_p, 0, sizeof(struct sigaction));
   sigAct_p->sa_handler = &sigintHandler;
 
-  if(status = sigaction(SIGINT, sigAct_p, NULL)) {
-    die("Could not setup SIGINT", status);
+  if(sigaction(SIGINT, sigAct_p, NULL)) {
+    die("Could not setup SIGINT", EC_SIGINT);
   } else {
     CMG_PRINT(printf("[setupSignals] SIGINT SUCCESS\n"));
   }
   return;
 }
 
-ERROR bacom()
+ERROR bacon()
 {
   CMG_PRINT(printf("foijfowe\n"));
   return SUCCESS;
@@ -111,7 +113,7 @@ ERROR taskMain ()
     CMG_PRINT(printf("loopVal:%x\n", loopVal));
     if (loopVal > 0xF) {
       CMG_PRINT(printf("really?\n"));
-      bacom();
+      bacon();
       loopVal = 0;
     } else {
       loopVal += 1;
@@ -124,15 +126,23 @@ ERROR taskMain ()
 /* Main Routine */
 int main (int argc, char *argv[])
 {
-  ERROR status = 0;
+  ERROR status;
+
+  status = SUCCESS;
+
   CMG_PRINT(printf("Hi chris\n"));
 
   /* Route signals to proper handlers */
   setupSignals();
 
+  /* Initialize i2c */
+  iic_master_init();
+
   /* Main task entry point */
   status = taskMain();
 
-  CMG_PRINT(printf("We're done:%x\n", status));
+  /* SHOULD NEVER GET HERE: cleanup just incase */
+  iic_master_close();
+
   return status;
 }
