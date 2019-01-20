@@ -56,7 +56,7 @@ void iic_master_close()
 {
   CMG_PRINT(printf("[iic_master_close] dispose memory, disconnect bcm2835\n"));
   if (!bcm2835_close()) {
-    printf("[iic_master_close] Error closing bcm2835 IO:%x\n", status);
+    printf("[iic_master_close] Error closing bcm2835 IO\n");
   } else {
     CMG_PRINT(printf("[iic_master_close] bcm2835_close SUCCESS\n"));
   }
